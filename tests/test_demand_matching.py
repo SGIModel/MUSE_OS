@@ -125,12 +125,12 @@ def test_no_constraints_i_dims(demand, cost):
 
     from muse.demand_matching import demand_matching
 
-    x = demand_matching(demand.sum("a"), cost, protected_dims={"a"})
+    x = demand_matching(demand.sum("a"), cost)
     assert set(x.dims) == set(demand.dims)
     x, expected = broadcast(x.sum("a"), demand.sum("a"))
     assert x.values == approx(expected.values)
 
-    x = demand_matching(demand.sum("b"), cost, protected_dims={"b"})
+    x = demand_matching(demand.sum("b"), cost)
     assert set(x.dims) == set(demand.dims)
     x, expected = broadcast(x.sum("b"), demand.sum("b"))
     assert x.values == approx(expected.values)
@@ -151,42 +151,3 @@ def test_one_non_binding_constraint(demand, cost):
     assert set(x.dims) == set(demand.dims)
     x, expected = broadcast(x, demand)
     assert x.values == approx(expected.values)
-
-
-def test_one_cutting_constraint(demand, cost):
-    """Constraint where excess is not always 0."""
-    from xarray import broadcast
-
-    from muse.demand_matching import demand_matching
-
-    constraint = demand.sum("a") * 0.5
-
-    x = demand_matching(demand, cost, constraint)
-    assert set(x.dims) == set(demand.dims)
-    assert (x.sum("a") - constraint <= 1e-12).all()
-    expected, actual = broadcast(x.sum("a") + constraint, demand.sum("a"))
-    assert actual.values == approx(expected.values)
-
-    x = demand_matching(demand.sum("b"), cost, constraint)
-    assert set(x.dims) == set(demand.dims)
-    assert (x.sum("b") - demand.sum("b") < 1e-12).all()
-
-
-def test_two_cutting_constraint(demand, cost):
-    """Constraint where excess is not always 0."""
-    from muse.demand_matching import demand_matching
-
-    constraint0 = demand.sum("a") * 0.75
-    constraint1 = demand.sum("b") * 0.85 + demand.sum("a") * 0.80
-
-    x = demand_matching(demand, cost, constraint0, constraint1)
-    assert set(x.dims) == set(demand.dims)
-    assert (x.sum("a") - constraint0 <= 1e-12).all()
-    assert (x - constraint1 <= 1e-12).all()
-    assert (x - demand <= 1e-12).all()
-
-    x = demand_matching(demand.sum("a"), cost, constraint0, constraint1)
-    assert set(x.dims) == set(demand.dims)
-    assert (x.sum("a") - constraint0 <= 1e-12).all()
-    assert (x - constraint1 <= 1e-12).all()
-    assert (x.sum("a") - demand.sum("a") <= 1e-12).all()

@@ -606,6 +606,17 @@ def lifetime_levelized_cost_of_energy(
         agent, demand, search_space, technologies, market
     )
 
+    if "timeslice" in capacity.dims:
+        capacity = capacity.where(
+            ~np.isinf(capacity),
+            capacity.where(~np.isinf(capacity)).max("replacement").max("timeslice"),
+        )
+    else:
+        capacity = capacity.where(
+            ~np.isinf(capacity),
+            capacity.where(~np.isinf(capacity)).max("replacement"),
+        )
+
     # Evolution of rates with time
     rates = discount_factor(
         years - agent.forecast_year + 1,
@@ -654,7 +665,15 @@ def lifetime_levelized_cost_of_energy(
         "commodity"
     )
     fixed_and_variable_costs = ((fixed_costs + variable_costs) * rates).sum("year")
-    denominator = production.where(production > 0.0, 1e-6)
+
+    # assume a 20% lower than minimum by asset, replacement, and ts when production 0
+    small_m = 0.8 * production.where(production > 0).sel(commodity=products).min(
+        "asset"
+    ).min("replacement").min("timeslice")
+    denominator = production.copy(deep=True)
+    denominator.loc[dict(commodity=products)] = production.sel(
+        commodity=products
+    ).where(production.sel(commodity=products) > 0.0, small_m.values)
     results = (
         installed_capacity_costs
         + fuel_costs

@@ -404,6 +404,8 @@ def test_demand_matched_production(
     from muse.timeslices import QuantityType, convert_timeslice
 
     # try and make sure we have a few more outputs than the default fixture
+    technologies = technologies.interp(year=capacity.year)
+    technologies = technologies.sel(year=capacity.year.min())
     technologies.comm_usage[:] = np.random.choice(
         [CommodityUsage.PRODUCT] * 3 + list(set(technologies.comm_usage.values)),
         technologies.comm_usage.shape,

@@ -137,9 +137,10 @@ def test_zero_utilization_factor_supply_timeslice(
     )
 
 
-@mark.parametrize("utilization_factors", [([0], [1]), ([1], [0])])
+@mark.parametrize("utilization_factors", [([0], [0]), ([0], [0])])
 @mark.parametrize("process_name", [("gasCCGT", "windturbine")])
 def test_all_zero_fatal_error(tmpdir, utilization_factors, process_name):
+    """Raises error if all utilization factors are zero"""
     from muse import examples
     from muse.mca import MCA
 

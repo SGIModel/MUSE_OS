@@ -477,7 +477,7 @@ agents
 
 lpsolver
    This is the optimisation solver used to make investment decisions. The two options
-   available for this are "adhoc" or "scipy" solvers. The "scipy" solver should be used
+   available for this are "adhoc" (which sums costs on the timeslices, whilst its variant "adhoc_timeslices" chooses the asset at the minimum timeslice cost and iterates) or "scipy" solvers. The "scipy" solver should be used
    when introducing minimum constraints and using the trade functionality.
 
 

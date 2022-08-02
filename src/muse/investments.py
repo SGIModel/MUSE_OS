@@ -253,6 +253,8 @@ def adhoc_match_demand(
     year: int,
     timeslice_op: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
 ) -> xr.DataArray:
+    from numpy import any, round
+
     from muse.demand_matching import demand_matching
     from muse.quantities import capacity_in_use, maximum_production
     from muse.timeslices import QuantityType, convert_timeslice
@@ -269,6 +271,7 @@ def adhoc_match_demand(
         technology=costs.replacement,
         commodity=demand.commodity,
     ).drop_vars("technology")
+
     if "timeslice" in demand.dims and "timeslice" not in max_prod.dims:
         max_prod = convert_timeslice(max_prod, demand, QuantityType.EXTENSIVE)
 
@@ -276,16 +279,94 @@ def adhoc_match_demand(
     # Any production assigned to them by the demand-matching algorithm will be removed.
     minobj = costs.min()
     maxobj = costs.where(search_space, minobj).max("replacement") + 1
-
-    if "timeslice" in costs.dims and timeslice_op is not None:
-        costs = timeslice_op(costs)
+    # Take average asset cost over the assets
+    if "timeslice" in costs.dims:
+        costs = costs.mean(dim="asset").sum("timeslice")
 
     decision = costs.where(search_space, maxobj)
 
     production = demand_matching(
-        demand.sel(asset=demand.asset.isin(search_space.asset)), decision, max_prod
+        demand.sel(asset=demand.asset.isin(search_space.asset)),
+        decision,
+        max_prod,
     ).where(search_space, 0)
 
+    res = round(
+        production.sum("replacement").sum("asset")
+        - demand.sel(asset=demand.asset.isin(search_space.asset)).sum("asset"),
+        4,
+    )
+
+    if any(res) < 0:
+        raise ValueError("System could not be solved")
+
+    # capacity can come with timeslices if the utilization factor has timeslices
+    capacity = capacity_in_use(
+        production, technologies, year=year, technology=production.replacement
+    ).drop_vars("technology")
+    if "timeslice" in capacity.dims and timeslice_op is not None:
+        capacity = timeslice_op(capacity)
+
+    return capacity.rename("investment")
+
+
+@register_investment(name=["adhoc_timeslice"])
+def adhoc_timeslice_demand(
+    costs: xr.DataArray,
+    search_space: xr.DataArray,
+    technologies: xr.Dataset,
+    constraints: List[Constraint],
+    year: int,
+    timeslice_op: Optional[Callable[[xr.DataArray], xr.DataArray]] = None,
+) -> xr.DataArray:
+    from numpy import any, round
+
+    from muse.demand_matching import demand_matching
+    from muse.quantities import capacity_in_use, maximum_production
+    from muse.timeslices import QuantityType, convert_timeslice
+
+    demand = next((c for c in constraints if c.name == "demand")).b
+
+    max_capacity = next(
+        (c for c in constraints if c.name == "max capacity expansion")
+    ).b
+    max_prod = maximum_production(
+        technologies,
+        max_capacity,
+        year=year,
+        technology=costs.replacement,
+        commodity=demand.commodity,
+    ).drop_vars("technology")
+
+    if "timeslice" in demand.dims and "timeslice" not in max_prod.dims:
+        max_prod = convert_timeslice(max_prod, demand, QuantityType.EXTENSIVE)
+
+    # Push disabled techs to last rank.
+    # Any production assigned to them by the demand-matching algorithm will be removed.
+    minobj = costs.min()
+    maxobj = costs.where(search_space, minobj).max("replacement") + 1
+    # Take average asset cost over the assets
+    if "timeslice" in costs.dims:
+        costs = costs.mean(dim="asset")
+
+    decision = costs.where(search_space, maxobj)
+
+    production = demand_matching(
+        demand.sel(asset=demand.asset.isin(search_space.asset)).sum("asset"),
+        decision,
+        max_prod,
+    ).where(search_space, 0)
+
+    res = round(
+        production.sum("replacement").sum("asset")
+        - demand.sel(asset=demand.asset.isin(search_space.asset)).sum("asset"),
+        4,
+    )
+
+    if any(res) < 0:
+        raise ValueError("System could not be solved")
+
+    # capacity can come with timeslices if the utilization factor has timeslices
     capacity = capacity_in_use(
         production, technologies, year=year, technology=production.replacement
     ).drop_vars("technology")
